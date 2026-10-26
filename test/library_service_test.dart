@@ -21,6 +21,7 @@ void main() {
         Member(id: 'm1', name: 'Sara'),
         Member(id: 'm2', name: 'Omar'),
         Member(id: 'm3', name: 'Lina'),
+        Member(id: 'm4', name: 'Karim'),
       ],
       clock: () => today,
     );
@@ -400,6 +401,86 @@ void main() {
         () => service.reserve(memberId: 'm1', bookId: 'nothing'),
         throwsLoanException('Book not found'),
       );
+    });
+  });
+
+  group('holds', () {
+    // Lina borrowed b2 (1 copy) on Jan 1; today is Jan 10.
+    setUp(() {
+      today = DateTime(2026, 1, 1);
+      service.borrow(memberId: 'm3', bookId: 'b2');
+      today = DateTime(2026, 1, 10);
+    });
+
+    ReservationStatus? statusOf(String memberId) =>
+        service.reservationStatus(memberId: memberId, bookId: 'b2');
+
+    void linaReturnsB2() => service.returnBook(memberId: 'm3', bookId: 'b2');
+
+    test('a returned copy goes on hold for the first in the queue', () {
+      service.reserve(memberId: 'm1', bookId: 'b2');
+      service.reserve(memberId: 'm2', bookId: 'b2');
+
+      linaReturnsB2();
+
+      expect(statusOf('m1'), OnHold(DateTime(2026, 1, 13)));
+      expect(statusOf('m2'), const Waiting(1));
+      expect(service.availableCopies('b2'), 0);
+    });
+
+    test('another member cannot borrow a held copy', () {
+      service.reserve(memberId: 'm1', bookId: 'b2');
+      service.reserve(memberId: 'm2', bookId: 'b2');
+      linaReturnsB2();
+
+      expect(
+        () => service.borrow(memberId: 'm2', bookId: 'b2'),
+        throwsLoanException('No copies available'),
+      );
+    });
+
+    test('the holder collects the copy by borrowing it', () {
+      service.reserve(memberId: 'm1', bookId: 'b2');
+      linaReturnsB2();
+
+      final loan = service.borrow(memberId: 'm1', bookId: 'b2');
+
+      expect(loan.isActive, isTrue);
+      expect(statusOf('m1'), isNull);
+      expect(service.availableCopies('b2'), 0);
+    });
+
+    test(
+      'a holder at the borrowing limit cannot collect, and keeps the hold',
+      () {
+        for (final bookId in ['b1', 'b3', 'b4']) {
+          service.borrow(memberId: 'm1', bookId: bookId);
+        }
+        service.reserve(memberId: 'm1', bookId: 'b2');
+        linaReturnsB2();
+
+        expect(
+          () => service.borrow(memberId: 'm1', bookId: 'b2'),
+          throwsLoanException('Borrowing limit reached (3 books)'),
+        );
+        expect(statusOf('m1'), OnHold(DateTime(2026, 1, 13)));
+      },
+    );
+
+    test('each returned copy goes on hold for the next in the queue', () {
+      // Both copies of b1 are out with Lina and Karim.
+      service.borrow(memberId: 'm3', bookId: 'b1');
+      service.borrow(memberId: 'm4', bookId: 'b1');
+      service.reserve(memberId: 'm1', bookId: 'b1');
+      service.reserve(memberId: 'm2', bookId: 'b1');
+
+      service.returnBook(memberId: 'm3', bookId: 'b1');
+      service.returnBook(memberId: 'm4', bookId: 'b1');
+
+      final lastDay = OnHold(DateTime(2026, 1, 13));
+      expect(service.reservationStatus(memberId: 'm1', bookId: 'b1'), lastDay);
+      expect(service.reservationStatus(memberId: 'm2', bookId: 'b1'), lastDay);
+      expect(service.availableCopies('b1'), 0);
     });
   });
 }

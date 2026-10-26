@@ -33,6 +33,7 @@ class LibraryService {
   static const lateFeePerDay = 5;
   static const lateFeeCap = 50;
   static const feeBlockThreshold = 20;
+  static const holdPeriod = Duration(days: 3);
 
   final Map<String, Book> _books;
   final Map<String, Member> _members;
@@ -47,7 +48,8 @@ class LibraryService {
   int availableCopies(String bookId) {
     final book = _requireBook(bookId);
     final onLoan = _loans.where((l) => l.isActive && l.bookId == bookId).length;
-    return book.totalCopies - onLoan;
+    final onHold = _queueFor(bookId).where((r) => r.isOnHold).length;
+    return book.totalCopies - onLoan - onHold;
   }
 
   List<Loan> activeLoansFor(String memberId) {
@@ -102,10 +104,27 @@ class LibraryService {
     required String memberId,
     required String bookId,
   }) {
-    final queue = _reservations.where((r) => r.bookId == bookId).toList();
-    final index = queue.indexWhere((r) => r.memberId == memberId);
-    return index == -1 ? null : Waiting(index + 1);
+    final queue = _queueFor(bookId);
+    final reservation = queue.where((r) => r.memberId == memberId).firstOrNull;
+    if (reservation == null) return null;
+    final heldOn = reservation.heldOn;
+    if (heldOn != null) {
+      return OnHold(
+        DateTime(heldOn.year, heldOn.month, heldOn.day + holdPeriod.inDays),
+      );
+    }
+    final waiting = queue.where((r) => !r.isOnHold).toList();
+    return Waiting(waiting.indexOf(reservation) + 1);
   }
+
+  /// The member's reservation for the book if a copy is on hold for them.
+  Reservation? _holdFor(String memberId, String bookId) => _queueFor(
+    bookId,
+  ).where((r) => r.memberId == memberId && r.isOnHold).firstOrNull;
+
+  /// The book's reservations, oldest first.
+  List<Reservation> _queueFor(String bookId) =>
+      _reservations.where((r) => r.bookId == bookId).toList();
 
   Loan borrow({required String memberId, required String bookId}) {
     _requireMember(memberId);
@@ -121,9 +140,11 @@ class LibraryService {
         'Borrowing limit reached ($borrowingLimit books)',
       );
     }
-    if (availableCopies(bookId) == 0) {
+    final hold = _holdFor(memberId, bookId);
+    if (hold == null && availableCopies(bookId) == 0) {
       throw const LoanException('No copies available');
     }
+    _reservations.remove(hold);
     final today = _clock();
     final loan = Loan(
       bookId: bookId,
@@ -141,6 +162,8 @@ class LibraryService {
       throw const LoanException('Member does not have this book');
     }
     loan.returnedOn = _clock();
+    final next = _queueFor(bookId).where((r) => !r.isOnHold).firstOrNull;
+    next?.heldOn = loan.returnedOn;
     final daysLate = _calendarDaysBetween(loan.dueOn, loan.returnedOn!);
     if (daysLate > 0) {
       final amount = min(daysLate * lateFeePerDay, lateFeeCap);

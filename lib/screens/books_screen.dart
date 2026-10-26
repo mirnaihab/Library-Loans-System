@@ -114,6 +114,8 @@ class _BooksScreenState extends State<BooksScreen> {
   static String? _reservationText(ReservationStatus? status) =>
       switch (status) {
         Waiting(:final position) => 'Reserved · #$position in queue',
+        OnHold(:final lastDay) =>
+          'On hold for you until ${lastDay.day}/${lastDay.month}',
         null => null,
       };
 
@@ -130,6 +132,15 @@ class _BooksScreenState extends State<BooksScreen> {
           'Returned "${book.title}"',
         ),
         child: const Text('Return'),
+      );
+    }
+    if (status is OnHold) {
+      return FilledButton(
+        onPressed: () => _run(
+          () => _service.borrow(memberId: _memberId, bookId: book.id),
+          'Borrowed "${book.title}"',
+        ),
+        child: const Text('Collect'),
       );
     }
     if (status is Waiting) return null;

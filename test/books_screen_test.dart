@@ -234,5 +234,50 @@ void main() {
         findsNothing,
       );
     });
+
+    group('with a hold', () {
+      late DateTime today;
+
+      // Sara borrows b2 (1 copy) on Jan 1, Omar reserves it,
+      // and Sara returns it on Jan 10, so it goes on hold for Omar.
+      Future<void> holdB2ForOmar(WidgetTester tester) async {
+        today = DateTime(2026, 1, 1);
+        await pumpApp(tester, clock: () => today);
+        await tester.tap(buttonIn('b2', 'Borrow'));
+        await tester.pump();
+        await selectMember(tester, 'Omar');
+        await tester.tap(buttonIn('b2', 'Reserve'));
+        await tester.pump();
+        await selectMember(tester, 'Sara');
+        today = DateTime(2026, 1, 10);
+        await tester.tap(buttonIn('b2', 'Return'));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('the holder sees the hold and collects it', (tester) async {
+        await holdB2ForOmar(tester);
+        await selectMember(tester, 'Omar');
+
+        expect(subtitleOf('b2', 'On hold for you until 13/1'), findsOneWidget);
+
+        await tester.tap(buttonIn('b2', 'Collect'));
+        await tester.pumpAndSettle();
+
+        expect(buttonIn('b2', 'Return'), findsOneWidget);
+        expect(
+          find.text('Borrowed "The Pragmatic Programmer"'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('another member sees the held copy as unavailable', (
+        tester,
+      ) async {
+        await holdB2ForOmar(tester);
+
+        expect(subtitleOf('b2', '0 of 1 available'), findsOneWidget);
+        expect(buttonIn('b2', 'Reserve'), findsOneWidget);
+      });
+    });
   });
 }
