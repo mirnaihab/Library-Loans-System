@@ -24,6 +24,10 @@ void main() {
     );
   });
 
+  Matcher throwsLoanException(String message) => throwsA(
+    isA<LoanException>().having((e) => e.message, 'message', message),
+  );
+
   group('borrow', () {
     test('creates a loan due in 14 days', () {
       final loan = service.borrow(memberId: 'm1', bookId: 'b1');
@@ -44,13 +48,7 @@ void main() {
 
       expect(
         () => service.borrow(memberId: 'm2', bookId: 'b2'),
-        throwsA(
-          isA<LoanException>().having(
-            (e) => e.message,
-            'message',
-            'No copies available',
-          ),
-        ),
+        throwsLoanException('No copies available'),
       );
     });
 
@@ -76,24 +74,20 @@ void main() {
   });
 
   group('borrowing limit', () {
-    void borrowThree(String memberId) {
+    void borrowUpToLimit(String memberId) {
       for (final bookId in ['b1', 'b2', 'b3']) {
         service.borrow(memberId: memberId, bookId: bookId);
       }
     }
 
-    Matcher throwsLoanException(String message) => throwsA(
-      isA<LoanException>().having((e) => e.message, 'message', message),
-    );
-
     test('allows 3 active loans', () {
-      borrowThree('m1');
+      borrowUpToLimit('m1');
 
       expect(service.activeLoansFor('m1'), hasLength(3));
     });
 
     test('rejects a 4th active loan', () {
-      borrowThree('m1');
+      borrowUpToLimit('m1');
 
       expect(
         () => service.borrow(memberId: 'm1', bookId: 'b4'),
@@ -102,7 +96,7 @@ void main() {
     });
 
     test('a rejected borrow changes nothing', () {
-      borrowThree('m1');
+      borrowUpToLimit('m1');
 
       expect(
         () => service.borrow(memberId: 'm1', bookId: 'b4'),
@@ -113,7 +107,7 @@ void main() {
     });
 
     test('returning a book lets the member borrow again', () {
-      borrowThree('m1');
+      borrowUpToLimit('m1');
       service.returnBook(memberId: 'm1', bookId: 'b2');
 
       final loan = service.borrow(memberId: 'm1', bookId: 'b4');
@@ -123,7 +117,7 @@ void main() {
     });
 
     test('counts overdue loans', () {
-      borrowThree('m1');
+      borrowUpToLimit('m1');
       today = DateTime(2026, 3, 1);
 
       expect(
@@ -143,7 +137,7 @@ void main() {
     });
 
     test('is reported after "Member already has this book"', () {
-      borrowThree('m1');
+      borrowUpToLimit('m1');
 
       expect(
         () => service.borrow(memberId: 'm1', bookId: 'b1'),
@@ -153,7 +147,7 @@ void main() {
 
     test('is reported before "No copies available"', () {
       service.borrow(memberId: 'm2', bookId: 'b4');
-      borrowThree('m1');
+      borrowUpToLimit('m1');
 
       expect(
         () => service.borrow(memberId: 'm1', bookId: 'b4'),
