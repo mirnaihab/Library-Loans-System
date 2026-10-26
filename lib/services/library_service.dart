@@ -61,6 +61,17 @@ class LibraryService {
         .fold(0, (sum, f) => sum + f.amount);
   }
 
+  /// Marks all of the member's unpaid late fees as paid.
+  void payFees(String memberId) {
+    if (outstandingFees(memberId) == 0) {
+      throw const LoanException('No outstanding fees');
+    }
+    final today = _clock();
+    for (final fee in _fees.where((f) => !f.isPaid && f.memberId == memberId)) {
+      fee.paidOn = today;
+    }
+  }
+
   Loan borrow({required String memberId, required String bookId}) {
     _requireMember(memberId);
     _requireBook(bookId);

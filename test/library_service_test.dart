@@ -288,4 +288,38 @@ void main() {
       );
     });
   });
+
+  group('payFees', () {
+    test('clears outstanding fees so the member can borrow again', () {
+      returnOn(DateTime(2026, 1, 29)); // 25 EGP
+
+      service.payFees('m1');
+
+      expect(service.outstandingFees('m1'), 0);
+      expect(service.borrow(memberId: 'm1', bookId: 'b2').isActive, isTrue);
+    });
+
+    test('a late return after paying adds only the new fee', () {
+      returnOn(DateTime(2026, 1, 29)); // 25 EGP
+      service.payFees('m1');
+
+      returnOn(DateTime(2026, 1, 25), bookId: 'b2'); // 5 EGP
+
+      expect(service.outstandingFees('m1'), 5);
+    });
+
+    test('fails when nothing is owed', () {
+      expect(
+        () => service.payFees('m1'),
+        throwsLoanException('No outstanding fees'),
+      );
+    });
+
+    test('fails for an unknown member', () {
+      expect(
+        () => service.payFees('nobody'),
+        throwsLoanException('Member not found'),
+      );
+    });
+  });
 }
