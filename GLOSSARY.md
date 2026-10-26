@@ -32,3 +32,17 @@ _Avoid_: Fine, penalty
 **Outstanding fees**:
 The total of a member's late fees that have not yet been paid.
 _Avoid_: Balance, debt
+
+**Reservation**:
+A member's request to borrow a book that has no available copies, waiting its turn.
+_Avoid_: Waitlist, booking
+
+**Reservation queue**:
+A book's reservations, oldest first.
+
+**Hold**:
+A returned copy set aside for the member at the front of the reservation queue, for a limited time.
+_Avoid_: Reserved copy
+
+**Collect**:
+To borrow the copy that is on hold for you.

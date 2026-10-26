@@ -119,16 +119,17 @@ void main() {
     },
   );
 
-  testWidgets('another member cannot borrow the last copy', (tester) async {
+  testWidgets('a book with no copies shows Reserve instead of Borrow', (
+    tester,
+  ) async {
     await pumpApp(tester);
     await tester.tap(buttonIn('b2', 'Borrow'));
     await tester.pump();
 
     await selectMember(tester, 'Omar');
-    await tester.tap(buttonIn('b2', 'Borrow'));
-    await tester.pumpAndSettle(); // let the previous snackbar animate out
 
-    expect(find.text('No copies available'), findsOneWidget);
+    expect(buttonIn('b2', 'Reserve'), findsOneWidget);
+    expect(buttonIn('b2', 'Borrow'), findsNothing);
   });
 
   group('outstanding fees', () {
@@ -205,6 +206,95 @@ void main() {
         find.byKey(const Key('outstandingFees')).hitTestable(),
         findsOneWidget,
       );
+    });
+  });
+
+  group('reservations', () {
+    Finder subtitleOf(String bookId, String text) => find.descendant(
+      of: find.byKey(Key('book-$bookId')),
+      matching: find.textContaining(text),
+    );
+
+    testWidgets('Reserve puts the member in the queue', (tester) async {
+      await pumpApp(tester);
+      await tester.tap(buttonIn('b2', 'Borrow'));
+      await tester.pump();
+      await selectMember(tester, 'Omar');
+
+      await tester.tap(buttonIn('b2', 'Reserve'));
+      await tester.pumpAndSettle(); // let the previous snackbar animate out
+
+      expect(find.text('Reserved "The Pragmatic Programmer"'), findsOneWidget);
+      expect(subtitleOf('b2', 'Reserved · #1 in queue'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('book-b2')),
+          matching: find.byType(ButtonStyleButton),
+        ),
+        findsNothing,
+      );
+    });
+
+    group('with a hold', () {
+      late DateTime today;
+
+      // Sara borrows b2 (1 copy) on Jan 1, Omar reserves it,
+      // and Sara returns it on Jan 10, so it goes on hold for Omar.
+      Future<void> holdB2ForOmar(WidgetTester tester) async {
+        today = DateTime(2026, 1, 1);
+        await pumpApp(tester, clock: () => today);
+        await tester.tap(buttonIn('b2', 'Borrow'));
+        await tester.pump();
+        await selectMember(tester, 'Omar');
+        await tester.tap(buttonIn('b2', 'Reserve'));
+        await tester.pump();
+        await selectMember(tester, 'Sara');
+        today = DateTime(2026, 1, 10);
+        await tester.tap(buttonIn('b2', 'Return'));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('the holder sees the hold and collects it', (tester) async {
+        await holdB2ForOmar(tester);
+        await selectMember(tester, 'Omar');
+
+        expect(subtitleOf('b2', 'On hold for you until 13/1'), findsOneWidget);
+
+        await tester.tap(buttonIn('b2', 'Collect'));
+        await tester.pumpAndSettle();
+
+        expect(buttonIn('b2', 'Return'), findsOneWidget);
+        expect(
+          find.text('Borrowed "The Pragmatic Programmer"'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('another member sees the held copy as unavailable', (
+        tester,
+      ) async {
+        await holdB2ForOmar(tester);
+
+        expect(subtitleOf('b2', '0 of 1 available'), findsOneWidget);
+        expect(buttonIn('b2', 'Reserve'), findsOneWidget);
+      });
+
+      testWidgets('an expired hold passes to the next in the queue', (
+        tester,
+      ) async {
+        await holdB2ForOmar(tester);
+        await tester.tap(buttonIn('b2', 'Reserve')); // Sara queues behind
+        await tester.pump();
+
+        today = DateTime(2026, 1, 14); // Omar's hold ended Jan 13
+        await selectMember(tester, 'Omar');
+
+        expect(buttonIn('b2', 'Reserve'), findsOneWidget);
+
+        await selectMember(tester, 'Sara');
+
+        expect(subtitleOf('b2', 'On hold for you until 17/1'), findsOneWidget);
+      });
     });
   });
 }
