@@ -25,6 +25,7 @@ class LibraryService {
        _clock = clock ?? DateTime.now;
 
   static const loanPeriod = Duration(days: 14);
+  static const borrowingLimit = 3;
 
   final Map<String, Book> _books;
   final Map<String, Member> _members;
@@ -48,11 +49,16 @@ class LibraryService {
   Loan borrow({required String memberId, required String bookId}) {
     _requireMember(memberId);
     _requireBook(bookId);
-    if (availableCopies(bookId) == 0) {
-      throw const LoanException('No copies available');
-    }
     if (_findActiveLoan(memberId, bookId) != null) {
       throw const LoanException('Member already has this book');
+    }
+    if (activeLoansFor(memberId).length >= borrowingLimit) {
+      throw const LoanException(
+        'Borrowing limit reached ($borrowingLimit books)',
+      );
+    }
+    if (availableCopies(bookId) == 0) {
+      throw const LoanException('No copies available');
     }
     final today = _clock();
     final loan = Loan(

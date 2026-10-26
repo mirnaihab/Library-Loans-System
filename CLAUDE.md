@@ -23,3 +23,17 @@ Used to practice the agentic SDLC flow: spec → context → build → review.
 - Time comes from the injected `clock`; never call `DateTime.now()` directly (keeps tests deterministic).
 - Data is in memory only. No new packages without asking.
 - Work test-first (red → green → refactor). One task per change; run `flutter test` and `flutter analyze` after each.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues on mirnaihab/Library-Loans-System (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
