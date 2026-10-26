@@ -63,6 +63,19 @@ class _BooksScreenState extends State<BooksScreen> {
       ),
       body: ListView(
         children: [
+          ListTile(
+            key: const Key('outstandingFees'),
+            title: Text(
+              'Outstanding fees: ${_service.outstandingFees(_memberId)} EGP',
+            ),
+            trailing: OutlinedButton(
+              key: const Key('payFees'),
+              onPressed: () =>
+                  _run(() => _service.payFees(_memberId), 'Fees paid'),
+              child: const Text('Mark as paid'),
+            ),
+          ),
+          const Divider(),
           for (final book in _service.books)
             ListTile(
               key: Key('book-${book.id}'),
