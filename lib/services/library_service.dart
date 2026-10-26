@@ -31,6 +31,7 @@ class LibraryService {
   static const borrowingLimit = 3;
   static const lateFeePerDay = 5;
   static const lateFeeCap = 50;
+  static const feeBlockThreshold = 20;
 
   final Map<String, Book> _books;
   final Map<String, Member> _members;
@@ -65,6 +66,9 @@ class LibraryService {
     _requireBook(bookId);
     if (_findActiveLoan(memberId, bookId) != null) {
       throw const LoanException('Member already has this book');
+    }
+    if (outstandingFees(memberId) > feeBlockThreshold) {
+      throw const LoanException('Please pay outstanding fees first');
     }
     if (activeLoansFor(memberId).length >= borrowingLimit) {
       throw const LoanException(
