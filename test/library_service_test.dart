@@ -175,4 +175,69 @@ void main() {
       );
     });
   });
+
+  group('late fees', () {
+    // Borrowed on Jan 10, so the due date is Jan 24.
+    void returnOn(
+      DateTime day, {
+      String memberId = 'm1',
+      String bookId = 'b1',
+    }) {
+      service.borrow(memberId: memberId, bookId: bookId);
+      today = day;
+      service.returnBook(memberId: memberId, bookId: bookId);
+      today = DateTime(2026, 1, 10);
+    }
+
+    test('a return 1 day late creates a 5 EGP fee', () {
+      returnOn(DateTime(2026, 1, 25, 0, 1));
+
+      expect(service.outstandingFees('m1'), 5);
+    });
+
+    test('a return on the due date creates no fee, whatever the time', () {
+      returnOn(DateTime(2026, 1, 24, 23, 59));
+
+      expect(service.outstandingFees('m1'), 0);
+    });
+
+    test('9 days late costs 45 EGP', () {
+      returnOn(DateTime(2026, 2, 2));
+
+      expect(service.outstandingFees('m1'), 45);
+    });
+
+    test('10 days late costs 50 EGP', () {
+      returnOn(DateTime(2026, 2, 3));
+
+      expect(service.outstandingFees('m1'), 50);
+    });
+
+    test('each fee is capped on its own', () {
+      returnOn(DateTime(2026, 2, 23), bookId: 'b1'); // 30 days late
+      returnOn(DateTime(2026, 1, 25), bookId: 'b2'); // 1 day late
+
+      expect(service.outstandingFees('m1'), 55);
+    });
+
+    test('an overdue book that is not returned adds no fee', () {
+      service.borrow(memberId: 'm1', bookId: 'b1');
+      today = DateTime(2026, 2, 23);
+
+      expect(service.outstandingFees('m1'), 0);
+    });
+
+    test('a single fee is capped at 50 EGP', () {
+      returnOn(DateTime(2026, 2, 23)); // 30 days late
+
+      expect(service.outstandingFees('m1'), 50);
+    });
+
+    test('outstanding fees fail for an unknown member', () {
+      expect(
+        () => service.outstandingFees('nobody'),
+        throwsLoanException('Member not found'),
+      );
+    });
+  });
 }

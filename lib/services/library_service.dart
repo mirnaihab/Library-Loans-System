@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import '../models/book.dart';
+import '../models/fee.dart';
 import '../models/loan.dart';
 import '../models/member.dart';
 
@@ -26,11 +29,14 @@ class LibraryService {
 
   static const loanPeriod = Duration(days: 14);
   static const borrowingLimit = 3;
+  static const lateFeePerDay = 5;
+  static const lateFeeCap = 50;
 
   final Map<String, Book> _books;
   final Map<String, Member> _members;
   final DateTime Function() _clock;
   final List<Loan> _loans = [];
+  final List<Fee> _fees = [];
 
   List<Book> get books => List.unmodifiable(_books.values);
   List<Member> get members => List.unmodifiable(_members.values);
@@ -44,6 +50,14 @@ class LibraryService {
   List<Loan> activeLoansFor(String memberId) {
     _requireMember(memberId);
     return _loans.where((l) => l.isActive && l.memberId == memberId).toList();
+  }
+
+  /// Total of the member's unpaid late fees, in whole EGP.
+  int outstandingFees(String memberId) {
+    _requireMember(memberId);
+    return _fees
+        .where((f) => !f.isPaid && f.memberId == memberId)
+        .fold(0, (sum, f) => sum + f.amount);
   }
 
   Loan borrow({required String memberId, required String bookId}) {
@@ -77,8 +91,20 @@ class LibraryService {
       throw const LoanException('Member does not have this book');
     }
     loan.returnedOn = _clock();
+    final daysLate = _calendarDaysBetween(loan.dueOn, loan.returnedOn!);
+    if (daysLate > 0) {
+      final amount = min(daysLate * lateFeePerDay, lateFeeCap);
+      _fees.add(Fee(memberId: memberId, loan: loan, amount: amount));
+    }
     return loan;
   }
+
+  /// Whole calendar days from [from] to [to], ignoring the time of day.
+  static int _calendarDaysBetween(DateTime from, DateTime to) => DateTime.utc(
+    to.year,
+    to.month,
+    to.day,
+  ).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
 
   Loan? _findActiveLoan(String memberId, String bookId) {
     for (final loan in _loans) {
