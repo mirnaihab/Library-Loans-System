@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import '../models/book.dart';
+import '../models/fee.dart';
 import '../models/loan.dart';
 import '../models/member.dart';
 
@@ -26,11 +29,15 @@ class LibraryService {
 
   static const loanPeriod = Duration(days: 14);
   static const borrowingLimit = 3;
+  static const lateFeePerDay = 5;
+  static const lateFeeCap = 50;
+  static const feeBlockThreshold = 20;
 
   final Map<String, Book> _books;
   final Map<String, Member> _members;
   final DateTime Function() _clock;
   final List<Loan> _loans = [];
+  final List<Fee> _fees = [];
 
   List<Book> get books => List.unmodifiable(_books.values);
   List<Member> get members => List.unmodifiable(_members.values);
@@ -46,11 +53,34 @@ class LibraryService {
     return _loans.where((l) => l.isActive && l.memberId == memberId).toList();
   }
 
+  /// Total of the member's unpaid late fees, in whole EGP.
+  int outstandingFees(String memberId) {
+    _requireMember(memberId);
+    return _unpaidFeesFor(memberId).fold(0, (sum, f) => sum + f.amount);
+  }
+
+  /// Marks all of the member's unpaid late fees as paid.
+  void payFees(String memberId) {
+    if (outstandingFees(memberId) == 0) {
+      throw const LoanException('No outstanding fees');
+    }
+    final today = _clock();
+    for (final fee in _unpaidFeesFor(memberId)) {
+      fee.paidOn = today;
+    }
+  }
+
+  Iterable<Fee> _unpaidFeesFor(String memberId) =>
+      _fees.where((f) => !f.isPaid && f.memberId == memberId);
+
   Loan borrow({required String memberId, required String bookId}) {
     _requireMember(memberId);
     _requireBook(bookId);
     if (_findActiveLoan(memberId, bookId) != null) {
       throw const LoanException('Member already has this book');
+    }
+    if (outstandingFees(memberId) > feeBlockThreshold) {
+      throw const LoanException('Please pay outstanding fees first');
     }
     if (activeLoansFor(memberId).length >= borrowingLimit) {
       throw const LoanException(
@@ -77,8 +107,20 @@ class LibraryService {
       throw const LoanException('Member does not have this book');
     }
     loan.returnedOn = _clock();
+    final daysLate = _calendarDaysBetween(loan.dueOn, loan.returnedOn!);
+    if (daysLate > 0) {
+      final amount = min(daysLate * lateFeePerDay, lateFeeCap);
+      _fees.add(Fee(loan: loan, amount: amount));
+    }
     return loan;
   }
+
+  /// Whole calendar days from [from] to [to], ignoring the time of day.
+  static int _calendarDaysBetween(DateTime from, DateTime to) => DateTime.utc(
+    to.year,
+    to.month,
+    to.day,
+  ).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
 
   Loan? _findActiveLoan(String memberId, String bookId) {
     for (final loan in _loans) {

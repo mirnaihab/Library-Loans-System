@@ -61,40 +61,59 @@ class _BooksScreenState extends State<BooksScreen> {
           const SizedBox(width: 16),
         ],
       ),
-      body: ListView(
+      body: Column(
         children: [
-          for (final book in _service.books)
-            ListTile(
-              key: Key('book-${book.id}'),
-              title: Text(book.title),
-              subtitle: Text(
-                '${book.author} · ${_service.availableCopies(book.id)} of '
-                '${book.totalCopies} available',
-              ),
-              trailing: borrowedIds.contains(book.id)
-                  ? OutlinedButton(
-                      onPressed: () => _run(
-                        () => _service.returnBook(
-                          memberId: _memberId,
-                          bookId: book.id,
-                        ),
-                        'Returned "${book.title}"',
-                      ),
-                      child: const Text('Return'),
-                    )
-                  : FilledButton(
-                      onPressed: () => _run(
-                        () => _service.borrow(
-                          memberId: _memberId,
-                          bookId: book.id,
-                        ),
-                        'Borrowed "${book.title}"',
-                      ),
-                      child: const Text('Borrow'),
-                    ),
+          ListTile(
+            key: const Key('outstandingFees'),
+            title: Text(
+              'Outstanding fees: ${_service.outstandingFees(_memberId)} EGP',
             ),
+            trailing: OutlinedButton(
+              key: const Key('payFees'),
+              onPressed: () =>
+                  _run(() => _service.payFees(_memberId), 'Fees paid'),
+              child: const Text('Mark as paid'),
+            ),
+          ),
+          const Divider(),
+          Expanded(child: _bookList(borrowedIds)),
         ],
       ),
+    );
+  }
+
+  Widget _bookList(Set<String> borrowedIds) {
+    return ListView(
+      children: [
+        for (final book in _service.books)
+          ListTile(
+            key: Key('book-${book.id}'),
+            title: Text(book.title),
+            subtitle: Text(
+              '${book.author} · ${_service.availableCopies(book.id)} of '
+              '${book.totalCopies} available',
+            ),
+            trailing: borrowedIds.contains(book.id)
+                ? OutlinedButton(
+                    onPressed: () => _run(
+                      () => _service.returnBook(
+                        memberId: _memberId,
+                        bookId: book.id,
+                      ),
+                      'Returned "${book.title}"',
+                    ),
+                    child: const Text('Return'),
+                  )
+                : FilledButton(
+                    onPressed: () => _run(
+                      () =>
+                          _service.borrow(memberId: _memberId, bookId: book.id),
+                      'Borrowed "${book.title}"',
+                    ),
+                    child: const Text('Borrow'),
+                  ),
+          ),
+      ],
     );
   }
 }

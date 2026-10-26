@@ -28,6 +28,14 @@ void main() {
     isA<LoanException>().having((e) => e.message, 'message', message),
   );
 
+  /// Borrows on Jan 10 (due Jan 24), returns on [day], then resets the clock.
+  void returnOn(DateTime day, {String memberId = 'm1', String bookId = 'b1'}) {
+    service.borrow(memberId: memberId, bookId: bookId);
+    today = day;
+    service.returnBook(memberId: memberId, bookId: bookId);
+    today = DateTime(2026, 1, 10);
+  }
+
   group('borrow', () {
     test('creates a loan due in 14 days', () {
       final loan = service.borrow(memberId: 'm1', bookId: 'b1');
@@ -172,6 +180,145 @@ void main() {
       expect(
         () => service.returnBook(memberId: 'm1', bookId: 'b1'),
         throwsA(isA<LoanException>()),
+      );
+    });
+  });
+
+  group('late fees', () {
+    test('a return 1 day late creates a 5 EGP fee', () {
+      returnOn(DateTime(2026, 1, 25, 0, 1));
+
+      expect(service.outstandingFees('m1'), 5);
+    });
+
+    test('a return on the due date creates no fee, whatever the time', () {
+      returnOn(DateTime(2026, 1, 24, 23, 59));
+
+      expect(service.outstandingFees('m1'), 0);
+    });
+
+    test('9 days late costs 45 EGP', () {
+      returnOn(DateTime(2026, 2, 2));
+
+      expect(service.outstandingFees('m1'), 45);
+    });
+
+    test('10 days late costs 50 EGP', () {
+      returnOn(DateTime(2026, 2, 3));
+
+      expect(service.outstandingFees('m1'), 50);
+    });
+
+    test('each fee is capped on its own', () {
+      service.borrow(memberId: 'm1', bookId: 'b1');
+      service.borrow(memberId: 'm1', bookId: 'b2');
+      today = DateTime(2026, 1, 25); // 1 day late
+      service.returnBook(memberId: 'm1', bookId: 'b2');
+      today = DateTime(2026, 2, 23); // 30 days late
+      service.returnBook(memberId: 'm1', bookId: 'b1');
+
+      expect(service.outstandingFees('m1'), 55);
+    });
+
+    test('an overdue book that is not returned adds no fee', () {
+      service.borrow(memberId: 'm1', bookId: 'b1');
+      today = DateTime(2026, 2, 23);
+
+      expect(service.outstandingFees('m1'), 0);
+    });
+
+    test('a single fee is capped at 50 EGP', () {
+      returnOn(DateTime(2026, 2, 23)); // 30 days late
+
+      expect(service.outstandingFees('m1'), 50);
+    });
+
+    test('outstanding fees fail for an unknown member', () {
+      expect(
+        () => service.outstandingFees('nobody'),
+        throwsLoanException('Member not found'),
+      );
+    });
+  });
+
+  group('borrowing with outstanding fees', () {
+    test('is blocked above 20 EGP', () {
+      returnOn(DateTime(2026, 1, 29)); // 5 days late: 25 EGP
+
+      expect(
+        () => service.borrow(memberId: 'm1', bookId: 'b2'),
+        throwsLoanException('Please pay outstanding fees first'),
+      );
+    });
+
+    test('is allowed at exactly 20 EGP', () {
+      returnOn(DateTime(2026, 1, 28)); // 4 days late: 20 EGP
+
+      final loan = service.borrow(memberId: 'm1', bookId: 'b2');
+
+      expect(loan.isActive, isTrue);
+    });
+
+    test('is reported after "Member already has this book"', () {
+      service.borrow(memberId: 'm1', bookId: 'b2');
+      returnOn(DateTime(2026, 1, 29)); // 25 EGP
+
+      expect(
+        () => service.borrow(memberId: 'm1', bookId: 'b2'),
+        throwsLoanException('Member already has this book'),
+      );
+    });
+
+    test('does not stop the member returning a book', () {
+      service.borrow(memberId: 'm1', bookId: 'b2');
+      returnOn(DateTime(2026, 1, 29)); // 25 EGP
+
+      final loan = service.returnBook(memberId: 'm1', bookId: 'b2');
+
+      expect(loan.isActive, isFalse);
+    });
+
+    test('is reported before "No copies available"', () {
+      returnOn(DateTime(2026, 1, 29)); // 25 EGP
+      service.borrow(memberId: 'm2', bookId: 'b2');
+
+      expect(
+        () => service.borrow(memberId: 'm1', bookId: 'b2'),
+        throwsLoanException('Please pay outstanding fees first'),
+      );
+    });
+  });
+
+  group('payFees', () {
+    test('clears outstanding fees so the member can borrow again', () {
+      returnOn(DateTime(2026, 1, 29)); // 25 EGP
+
+      service.payFees('m1');
+
+      expect(service.outstandingFees('m1'), 0);
+      expect(service.borrow(memberId: 'm1', bookId: 'b2').isActive, isTrue);
+    });
+
+    test('a late return after paying adds only the new fee', () {
+      returnOn(DateTime(2026, 1, 29)); // 25 EGP
+      service.payFees('m1');
+
+      returnOn(DateTime(2026, 1, 25), bookId: 'b2'); // 5 EGP
+
+      expect(service.outstandingFees('m1'), 5);
+    });
+
+    test('fails when nothing is owed', () {
+      expect(
+        () => service.payFees('m1'),
+        throwsLoanException('No outstanding fees'),
+      );
+    });
+
+    test('fails for an unknown member', () {
+      expect(
+        () => service.payFees('nobody'),
+        throwsLoanException('Member not found'),
       );
     });
   });

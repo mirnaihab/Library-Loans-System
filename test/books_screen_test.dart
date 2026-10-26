@@ -5,10 +5,20 @@ import 'package:library_loans/main.dart';
 import 'package:library_loans/services/library_service.dart';
 
 void main() {
-  Future<void> pumpApp(WidgetTester tester) => tester.pumpWidget(
-    LibraryApp(
-      service: LibraryService(books: sampleBooks, members: sampleMembers),
-    ),
+  Future<void> pumpApp(WidgetTester tester, {DateTime Function()? clock}) =>
+      tester.pumpWidget(
+        LibraryApp(
+          service: LibraryService(
+            books: sampleBooks,
+            members: sampleMembers,
+            clock: clock,
+          ),
+        ),
+      );
+
+  Finder outstandingFees(String text) => find.descendant(
+    of: find.byKey(const Key('outstandingFees')),
+    matching: find.text(text),
   );
 
   Finder buttonIn(String bookId, String label) => find.descendant(
@@ -119,5 +129,82 @@ void main() {
     await tester.pumpAndSettle(); // let the previous snackbar animate out
 
     expect(find.text('No copies available'), findsOneWidget);
+  });
+
+  group('outstanding fees', () {
+    late DateTime today;
+
+    setUp(() => today = DateTime(2026, 1, 10)); // books are due Jan 24
+
+    Future<void> returnLate(WidgetTester tester) async {
+      await tester.tap(buttonIn('b1', 'Borrow'));
+      await tester.pump();
+      today = DateTime(2026, 1, 27); // 3 days late
+      await tester.tap(buttonIn('b1', 'Return'));
+      await tester.pump();
+    }
+
+    testWidgets('shows the fee created by a late return', (tester) async {
+      await pumpApp(tester, clock: () => today);
+
+      expect(outstandingFees('Outstanding fees: 0 EGP'), findsOneWidget);
+
+      await returnLate(tester);
+
+      expect(outstandingFees('Outstanding fees: 15 EGP'), findsOneWidget);
+    });
+
+    testWidgets('Mark as paid clears the fees', (tester) async {
+      await pumpApp(tester, clock: () => today);
+      await returnLate(tester);
+
+      await tester.tap(find.byKey(const Key('payFees')));
+      await tester.pumpAndSettle(); // let the previous snackbar animate out
+
+      expect(outstandingFees('Outstanding fees: 0 EGP'), findsOneWidget);
+      expect(find.text('Fees paid'), findsOneWidget);
+    });
+
+    testWidgets('Mark as paid with nothing owed shows a message', (
+      tester,
+    ) async {
+      await pumpApp(tester, clock: () => today);
+
+      await tester.tap(find.byKey(const Key('payFees')));
+      await tester.pump();
+
+      expect(find.text('No outstanding fees'), findsOneWidget);
+    });
+
+    testWidgets('switching member shows that member\'s fees', (tester) async {
+      await pumpApp(tester, clock: () => today);
+      await returnLate(tester);
+
+      await selectMember(tester, 'Omar');
+
+      expect(outstandingFees('Outstanding fees: 0 EGP'), findsOneWidget);
+
+      await selectMember(tester, 'Sara');
+
+      expect(outstandingFees('Outstanding fees: 15 EGP'), findsOneWidget);
+    });
+
+    testWidgets('stay visible when the book list scrolls', (tester) async {
+      tester.view.physicalSize = const Size(800, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpApp(tester, clock: () => today);
+
+      await tester.drag(
+        find.byKey(const Key('book-b1')),
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('outstandingFees')).hitTestable(),
+        findsOneWidget,
+      );
+    });
   });
 }
