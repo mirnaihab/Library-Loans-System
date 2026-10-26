@@ -119,24 +119,32 @@ class LibraryService {
   /// the next waiting member from the day the previous hold expired, so a
   /// chain of expiries works out the same whenever it is looked at.
   void _expireHolds() {
-    final now = _clock();
-    final today = DateTime(now.year, now.month, now.day);
+    final today = _daysAfter(_clock(), 0);
     Reservation? expired() => _reservations
         .where((r) => r.isOnHold && _lastDayOf(r).isBefore(today))
         .firstOrNull;
     for (var hold = expired(); hold != null; hold = expired()) {
       _reservations.remove(hold);
-      final lastDay = _lastDayOf(hold);
-      final next = _queueFor(hold.bookId).where((r) => !r.isOnHold).firstOrNull;
-      next?.heldOn = DateTime(lastDay.year, lastDay.month, lastDay.day + 1);
+      _holdCopyForNextInQueue(
+        hold.bookId,
+        from: _daysAfter(_lastDayOf(hold), 1),
+      );
     }
   }
 
-  /// The last calendar day the member can collect their held copy.
-  static DateTime _lastDayOf(Reservation hold) {
-    final heldOn = hold.heldOn!;
-    return DateTime(heldOn.year, heldOn.month, heldOn.day + holdPeriod.inDays);
+  /// Puts a copy of the book on hold for the first waiting member, if any.
+  void _holdCopyForNextInQueue(String bookId, {required DateTime from}) {
+    final next = _queueFor(bookId).where((r) => !r.isOnHold).firstOrNull;
+    next?.heldOn = from;
   }
+
+  /// The last calendar day the member can collect their held copy.
+  static DateTime _lastDayOf(Reservation hold) =>
+      _daysAfter(hold.heldOn!, holdPeriod.inDays);
+
+  /// Midnight on the calendar day [days] after [day].
+  static DateTime _daysAfter(DateTime day, int days) =>
+      DateTime(day.year, day.month, day.day + days);
 
   /// The member's reservation for the book if a copy is on hold for them.
   Reservation? _holdFor(String memberId, String bookId) => _queueFor(
@@ -185,8 +193,7 @@ class LibraryService {
       throw const LoanException('Member does not have this book');
     }
     loan.returnedOn = _clock();
-    final next = _queueFor(bookId).where((r) => !r.isOnHold).firstOrNull;
-    next?.heldOn = loan.returnedOn;
+    _holdCopyForNextInQueue(bookId, from: loan.returnedOn!);
     final daysLate = _calendarDaysBetween(loan.dueOn, loan.returnedOn!);
     if (daysLate > 0) {
       final amount = min(daysLate * lateFeePerDay, lateFeeCap);

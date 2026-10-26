@@ -134,15 +134,7 @@ class _BooksScreenState extends State<BooksScreen> {
         child: const Text('Return'),
       );
     }
-    if (status is OnHold) {
-      return FilledButton(
-        onPressed: () => _run(
-          () => _service.borrow(memberId: _memberId, bookId: book.id),
-          'Borrowed "${book.title}"',
-        ),
-        child: const Text('Collect'),
-      );
-    }
+    if (status is OnHold) return _borrowButton(book, label: 'Collect');
     if (status is Waiting) return null;
     if (_service.availableCopies(book.id) == 0) {
       return FilledButton.tonal(
@@ -153,12 +145,15 @@ class _BooksScreenState extends State<BooksScreen> {
         child: const Text('Reserve'),
       );
     }
-    return FilledButton(
-      onPressed: () => _run(
-        () => _service.borrow(memberId: _memberId, bookId: book.id),
-        'Borrowed "${book.title}"',
-      ),
-      child: const Text('Borrow'),
-    );
+    return _borrowButton(book, label: 'Borrow');
   }
+
+  /// Borrow and Collect both borrow the book; only the label differs.
+  Widget _borrowButton(Book book, {required String label}) => FilledButton(
+    onPressed: () => _run(
+      () => _service.borrow(memberId: _memberId, bookId: book.id),
+      'Borrowed "${book.title}"',
+    ),
+    child: Text(label),
+  );
 }

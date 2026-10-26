@@ -492,9 +492,9 @@ void main() {
       service.returnBook(memberId: 'm3', bookId: 'b1');
       service.returnBook(memberId: 'm4', bookId: 'b1');
 
-      final lastDay = OnHold(DateTime(2026, 1, 13));
-      expect(service.reservationStatus(memberId: 'm1', bookId: 'b1'), lastDay);
-      expect(service.reservationStatus(memberId: 'm2', bookId: 'b1'), lastDay);
+      final held = OnHold(DateTime(2026, 1, 13));
+      expect(service.reservationStatus(memberId: 'm1', bookId: 'b1'), held);
+      expect(service.reservationStatus(memberId: 'm2', bookId: 'b1'), held);
       expect(service.availableCopies('b1'), 0);
     });
   });
