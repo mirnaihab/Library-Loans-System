@@ -188,5 +188,23 @@ void main() {
 
       expect(outstandingFees('Outstanding fees: 15 EGP'), findsOneWidget);
     });
+
+    testWidgets('stay visible when the book list scrolls', (tester) async {
+      tester.view.physicalSize = const Size(800, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpApp(tester, clock: () => today);
+
+      await tester.drag(
+        find.byKey(const Key('book-b1')),
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('outstandingFees')).hitTestable(),
+        findsOneWidget,
+      );
+    });
   });
 }
