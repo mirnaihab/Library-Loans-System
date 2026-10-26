@@ -46,6 +46,7 @@ class LibraryService {
   List<Member> get members => List.unmodifiable(_members.values);
 
   int availableCopies(String bookId) {
+    _expireHolds();
     final book = _requireBook(bookId);
     final onLoan = _loans.where((l) => l.isActive && l.bookId == bookId).length;
     final onHold = _queueFor(bookId).where((r) => r.isOnHold).length;
@@ -79,6 +80,7 @@ class LibraryService {
 
   /// Adds the member to the back of the book's reservation queue.
   Reservation reserve({required String memberId, required String bookId}) {
+    _expireHolds();
     _requireMember(memberId);
     _requireBook(bookId);
     if (_findActiveLoan(memberId, bookId) != null) {
@@ -104,17 +106,36 @@ class LibraryService {
     required String memberId,
     required String bookId,
   }) {
+    _expireHolds();
     final queue = _queueFor(bookId);
     final reservation = queue.where((r) => r.memberId == memberId).firstOrNull;
     if (reservation == null) return null;
-    final heldOn = reservation.heldOn;
-    if (heldOn != null) {
-      return OnHold(
-        DateTime(heldOn.year, heldOn.month, heldOn.day + holdPeriod.inDays),
-      );
-    }
+    if (reservation.isOnHold) return OnHold(_lastDayOf(reservation));
     final waiting = queue.where((r) => !r.isOnHold).toList();
     return Waiting(waiting.indexOf(reservation) + 1);
+  }
+
+  /// Ends every hold whose last day has passed. Each copy goes on hold for
+  /// the next waiting member from the day the previous hold expired, so a
+  /// chain of expiries works out the same whenever it is looked at.
+  void _expireHolds() {
+    final now = _clock();
+    final today = DateTime(now.year, now.month, now.day);
+    Reservation? expired() => _reservations
+        .where((r) => r.isOnHold && _lastDayOf(r).isBefore(today))
+        .firstOrNull;
+    for (var hold = expired(); hold != null; hold = expired()) {
+      _reservations.remove(hold);
+      final lastDay = _lastDayOf(hold);
+      final next = _queueFor(hold.bookId).where((r) => !r.isOnHold).firstOrNull;
+      next?.heldOn = DateTime(lastDay.year, lastDay.month, lastDay.day + 1);
+    }
+  }
+
+  /// The last calendar day the member can collect their held copy.
+  static DateTime _lastDayOf(Reservation hold) {
+    final heldOn = hold.heldOn!;
+    return DateTime(heldOn.year, heldOn.month, heldOn.day + holdPeriod.inDays);
   }
 
   /// The member's reservation for the book if a copy is on hold for them.
@@ -127,6 +148,7 @@ class LibraryService {
       _reservations.where((r) => r.bookId == bookId).toList();
 
   Loan borrow({required String memberId, required String bookId}) {
+    _expireHolds();
     _requireMember(memberId);
     _requireBook(bookId);
     if (_findActiveLoan(memberId, bookId) != null) {
@@ -157,6 +179,7 @@ class LibraryService {
   }
 
   Loan returnBook({required String memberId, required String bookId}) {
+    _expireHolds();
     final loan = _findActiveLoan(memberId, bookId);
     if (loan == null) {
       throw const LoanException('Member does not have this book');

@@ -278,6 +278,23 @@ void main() {
         expect(subtitleOf('b2', '0 of 1 available'), findsOneWidget);
         expect(buttonIn('b2', 'Reserve'), findsOneWidget);
       });
+
+      testWidgets('an expired hold passes to the next in the queue', (
+        tester,
+      ) async {
+        await holdB2ForOmar(tester);
+        await tester.tap(buttonIn('b2', 'Reserve')); // Sara queues behind
+        await tester.pump();
+
+        today = DateTime(2026, 1, 14); // Omar's hold ended Jan 13
+        await selectMember(tester, 'Omar');
+
+        expect(buttonIn('b2', 'Reserve'), findsOneWidget);
+
+        await selectMember(tester, 'Sara');
+
+        expect(subtitleOf('b2', 'On hold for you until 17/1'), findsOneWidget);
+      });
     });
   });
 }

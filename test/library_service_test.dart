@@ -483,4 +483,60 @@ void main() {
       expect(service.availableCopies('b1'), 0);
     });
   });
+
+  group('hold expiry', () {
+    // Karim borrowed b2 (1 copy) on Jan 1; Sara, Omar and Lina reserved it,
+    // and Karim returned it on Jan 10: on hold for Sara through Jan 13.
+    setUp(() {
+      today = DateTime(2026, 1, 1);
+      service.borrow(memberId: 'm4', bookId: 'b2');
+      service.reserve(memberId: 'm1', bookId: 'b2');
+      service.reserve(memberId: 'm2', bookId: 'b2');
+      service.reserve(memberId: 'm3', bookId: 'b2');
+      today = DateTime(2026, 1, 10);
+      service.returnBook(memberId: 'm4', bookId: 'b2');
+    });
+
+    ReservationStatus? statusOf(String memberId) =>
+        service.reservationStatus(memberId: memberId, bookId: 'b2');
+
+    test('the next in the queue gets the copy when a hold expires', () {
+      today = DateTime(2026, 1, 14);
+
+      expect(statusOf('m1'), isNull);
+      expect(statusOf('m2'), OnHold(DateTime(2026, 1, 17)));
+    });
+
+    test('a hold can still be collected late on its last day', () {
+      today = DateTime(2026, 1, 13, 23, 59);
+
+      final loan = service.borrow(memberId: 'm1', bookId: 'b2');
+
+      expect(loan.isActive, isTrue);
+    });
+
+    test('holds that expire in a chain each start when the last expired', () {
+      // Sara Jan 10-13, Omar Jan 14-17, Lina Jan 18-21.
+      today = DateTime(2026, 1, 20);
+
+      expect(statusOf('m1'), isNull);
+      expect(statusOf('m2'), isNull);
+      expect(statusOf('m3'), OnHold(DateTime(2026, 1, 21)));
+    });
+
+    test('the copy becomes available when nobody is waiting', () {
+      today = DateTime(2026, 1, 22); // Lina's hold ended Jan 21
+
+      expect(statusOf('m3'), isNull);
+      expect(service.availableCopies('b2'), 1);
+    });
+
+    test('a member whose hold expired can reserve again, at the back', () {
+      today = DateTime(2026, 1, 14);
+
+      service.reserve(memberId: 'm1', bookId: 'b2');
+
+      expect(statusOf('m1'), const Waiting(2));
+    });
+  });
 }
