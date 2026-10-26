@@ -56,9 +56,7 @@ class LibraryService {
   /// Total of the member's unpaid late fees, in whole EGP.
   int outstandingFees(String memberId) {
     _requireMember(memberId);
-    return _fees
-        .where((f) => !f.isPaid && f.memberId == memberId)
-        .fold(0, (sum, f) => sum + f.amount);
+    return _unpaidFeesFor(memberId).fold(0, (sum, f) => sum + f.amount);
   }
 
   /// Marks all of the member's unpaid late fees as paid.
@@ -67,10 +65,13 @@ class LibraryService {
       throw const LoanException('No outstanding fees');
     }
     final today = _clock();
-    for (final fee in _fees.where((f) => !f.isPaid && f.memberId == memberId)) {
+    for (final fee in _unpaidFeesFor(memberId)) {
       fee.paidOn = today;
     }
   }
+
+  Iterable<Fee> _unpaidFeesFor(String memberId) =>
+      _fees.where((f) => !f.isPaid && f.memberId == memberId);
 
   Loan borrow({required String memberId, required String bookId}) {
     _requireMember(memberId);
@@ -109,7 +110,7 @@ class LibraryService {
     final daysLate = _calendarDaysBetween(loan.dueOn, loan.returnedOn!);
     if (daysLate > 0) {
       final amount = min(daysLate * lateFeePerDay, lateFeeCap);
-      _fees.add(Fee(memberId: memberId, loan: loan, amount: amount));
+      _fees.add(Fee(loan: loan, amount: amount));
     }
     return loan;
   }
