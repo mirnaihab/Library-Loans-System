@@ -34,15 +34,21 @@ class _BooksScreenState extends State<BooksScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final borrowedIds = _service
-        .activeLoansFor(_memberId)
-        .map((l) => l.bookId)
-        .toSet();
+    final activeLoans = _service.activeLoansFor(_memberId);
+    final borrowedIds = activeLoans.map((l) => l.bookId).toSet();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Library'),
         actions: [
+          Center(
+            key: const Key('borrowCount'),
+            child: Text(
+              '${activeLoans.length} of ${LibraryService.borrowingLimit} '
+              'books borrowed',
+            ),
+          ),
+          const SizedBox(width: 16),
           DropdownButton<String>(
             key: const Key('memberPicker'),
             value: _memberId,

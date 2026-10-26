@@ -36,6 +36,60 @@ void main() {
     expect(find.text('Borrowed "The Pragmatic Programmer"'), findsOneWidget);
   });
 
+  Finder borrowCount(String text) => find.descendant(
+    of: find.byKey(const Key('borrowCount')),
+    matching: find.text(text),
+  );
+
+  testWidgets('shows how many books the member has borrowed', (tester) async {
+    await pumpApp(tester);
+
+    expect(borrowCount('0 of 3 books borrowed'), findsOneWidget);
+
+    await tester.tap(buttonIn('b1', 'Borrow'));
+    await tester.pump();
+
+    expect(borrowCount('1 of 3 books borrowed'), findsOneWidget);
+  });
+
+  testWidgets('returning a book lowers the borrowed count', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(buttonIn('b1', 'Borrow'));
+    await tester.pump();
+
+    await tester.tap(buttonIn('b1', 'Return'));
+    await tester.pump();
+
+    expect(borrowCount('0 of 3 books borrowed'), findsOneWidget);
+  });
+
+  testWidgets('switching member shows that member\'s count', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(buttonIn('b1', 'Borrow'));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('memberPicker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Omar').last);
+    await tester.pumpAndSettle();
+
+    expect(borrowCount('0 of 3 books borrowed'), findsOneWidget);
+  });
+
+  testWidgets('a 4th borrow shows the borrowing limit message', (tester) async {
+    await pumpApp(tester);
+    for (final bookId in ['b1', 'b2', 'b3']) {
+      await tester.tap(buttonIn(bookId, 'Borrow'));
+      await tester.pump();
+    }
+
+    await tester.tap(buttonIn('b4', 'Borrow'));
+    await tester.pumpAndSettle(); // let the previous snackbar animate out
+
+    expect(find.text('Borrowing limit reached (3 books)'), findsOneWidget);
+    expect(borrowCount('3 of 3 books borrowed'), findsOneWidget);
+  });
+
   testWidgets('another member cannot borrow the last copy', (tester) async {
     await pumpApp(tester);
     await tester.tap(buttonIn('b2', 'Borrow'));
