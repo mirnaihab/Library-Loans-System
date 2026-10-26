@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/book.dart';
 import '../services/library_service.dart';
 
 /// Lists all books for the selected member, with Borrow / Return buttons.
@@ -93,27 +94,29 @@ class _BooksScreenState extends State<BooksScreen> {
               '${book.author} · ${_service.availableCopies(book.id)} of '
               '${book.totalCopies} available',
             ),
-            trailing: borrowedIds.contains(book.id)
-                ? OutlinedButton(
-                    onPressed: () => _run(
-                      () => _service.returnBook(
-                        memberId: _memberId,
-                        bookId: book.id,
-                      ),
-                      'Returned "${book.title}"',
-                    ),
-                    child: const Text('Return'),
-                  )
-                : FilledButton(
-                    onPressed: () => _run(
-                      () =>
-                          _service.borrow(memberId: _memberId, bookId: book.id),
-                      'Borrowed "${book.title}"',
-                    ),
-                    child: const Text('Borrow'),
-                  ),
+            trailing: _actionFor(book, borrowedIds),
           ),
       ],
+    );
+  }
+
+  /// The one action the selected member can take on [book].
+  Widget _actionFor(Book book, Set<String> borrowedIds) {
+    if (borrowedIds.contains(book.id)) {
+      return OutlinedButton(
+        onPressed: () => _run(
+          () => _service.returnBook(memberId: _memberId, bookId: book.id),
+          'Returned "${book.title}"',
+        ),
+        child: const Text('Return'),
+      );
+    }
+    return FilledButton(
+      onPressed: () => _run(
+        () => _service.borrow(memberId: _memberId, bookId: book.id),
+        'Borrowed "${book.title}"',
+      ),
+      child: const Text('Borrow'),
     );
   }
 }
