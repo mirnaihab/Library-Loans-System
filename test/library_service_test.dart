@@ -467,6 +467,21 @@ void main() {
       },
     );
 
+    test(
+      'a holder owing more than 20 EGP cannot collect, and keeps the hold',
+      () {
+        returnOn(DateTime(2026, 1, 29)); // 25 EGP
+        service.reserve(memberId: 'm1', bookId: 'b2');
+        linaReturnsB2();
+
+        expect(
+          () => service.borrow(memberId: 'm1', bookId: 'b2'),
+          throwsLoanException('Please pay outstanding fees first'),
+        );
+        expect(statusOf('m1'), OnHold(DateTime(2026, 1, 13)));
+      },
+    );
+
     test('each returned copy goes on hold for the next in the queue', () {
       // Both copies of b1 are out with Lina and Karim.
       service.borrow(memberId: 'm3', bookId: 'b1');
