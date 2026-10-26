@@ -74,6 +74,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(borrowCount('0 of 3 books borrowed'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('memberPicker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sara').last);
+    await tester.pumpAndSettle();
+
+    expect(borrowCount('1 of 3 books borrowed'), findsOneWidget);
   });
 
   testWidgets('a 4th borrow shows the borrowing limit message', (tester) async {
