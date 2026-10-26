@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:library_loans/models/book.dart';
 import 'package:library_loans/models/member.dart';
+import 'package:library_loans/models/reservation.dart';
 import 'package:library_loans/services/library_service.dart';
 
 void main() {
@@ -19,6 +20,7 @@ void main() {
       members: const [
         Member(id: 'm1', name: 'Sara'),
         Member(id: 'm2', name: 'Omar'),
+        Member(id: 'm3', name: 'Lina'),
       ],
       clock: () => today,
     );
@@ -319,6 +321,84 @@ void main() {
       expect(
         () => service.payFees('nobody'),
         throwsLoanException('Member not found'),
+      );
+    });
+  });
+
+  group('reserve', () {
+    // b2 has 1 copy; Lina has it, so it has 0 available copies.
+    setUp(() => service.borrow(memberId: 'm3', bookId: 'b2'));
+
+    ReservationStatus? statusOf(String memberId, {String bookId = 'b2'}) =>
+        service.reservationStatus(memberId: memberId, bookId: bookId);
+
+    test('joins the reservation queue in order', () {
+      service.reserve(memberId: 'm1', bookId: 'b2');
+      service.reserve(memberId: 'm2', bookId: 'b2');
+
+      expect(statusOf('m1'), const Waiting(1));
+      expect(statusOf('m2'), const Waiting(2));
+    });
+
+    test('fails when copies are available', () {
+      expect(
+        () => service.reserve(memberId: 'm1', bookId: 'b1'),
+        throwsLoanException('Copies are available, borrow instead'),
+      );
+    });
+
+    test('fails for a book the member has on loan', () {
+      expect(
+        () => service.reserve(memberId: 'm3', bookId: 'b2'),
+        throwsLoanException('Member already has this book'),
+      );
+    });
+
+    test('fails when the member has already reserved the book', () {
+      service.reserve(memberId: 'm1', bookId: 'b2');
+
+      expect(
+        () => service.reserve(memberId: 'm1', bookId: 'b2'),
+        throwsLoanException('Already reserved'),
+      );
+    });
+
+    test('is allowed at the borrowing limit', () {
+      for (final bookId in ['b1', 'b3', 'b4']) {
+        service.borrow(memberId: 'm1', bookId: bookId);
+      }
+
+      service.reserve(memberId: 'm1', bookId: 'b2');
+
+      expect(statusOf('m1'), const Waiting(1));
+    });
+
+    test('is allowed while owing more than 20 EGP', () {
+      returnOn(DateTime(2026, 1, 29)); // 25 EGP
+
+      service.reserve(memberId: 'm1', bookId: 'b2');
+
+      expect(statusOf('m1'), const Waiting(1));
+    });
+
+    test('does not count toward the borrowing limit', () {
+      service.reserve(memberId: 'm1', bookId: 'b2');
+
+      for (final bookId in ['b1', 'b3', 'b4']) {
+        service.borrow(memberId: 'm1', bookId: bookId);
+      }
+
+      expect(service.activeLoansFor('m1'), hasLength(3));
+    });
+
+    test('fails for an unknown member or book', () {
+      expect(
+        () => service.reserve(memberId: 'nobody', bookId: 'b2'),
+        throwsLoanException('Member not found'),
+      );
+      expect(
+        () => service.reserve(memberId: 'm1', bookId: 'nothing'),
+        throwsLoanException('Book not found'),
       );
     });
   });

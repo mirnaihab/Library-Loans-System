@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/book.dart';
+import '../models/reservation.dart';
 import '../services/library_service.dart';
 
-/// Lists all books for the selected member, with Borrow / Return buttons.
+/// Lists all books for the selected member, with one action per book.
 class BooksScreen extends StatefulWidget {
   const BooksScreen({super.key, required this.service});
 
@@ -86,22 +87,42 @@ class _BooksScreenState extends State<BooksScreen> {
   Widget _bookList(Set<String> borrowedIds) {
     return ListView(
       children: [
-        for (final book in _service.books)
-          ListTile(
-            key: Key('book-${book.id}'),
-            title: Text(book.title),
-            subtitle: Text(
-              '${book.author} · ${_service.availableCopies(book.id)} of '
-              '${book.totalCopies} available',
-            ),
-            trailing: _actionFor(book, borrowedIds),
-          ),
+        for (final book in _service.books) _bookTile(book, borrowedIds),
       ],
     );
   }
 
-  /// The one action the selected member can take on [book].
-  Widget _actionFor(Book book, Set<String> borrowedIds) {
+  Widget _bookTile(Book book, Set<String> borrowedIds) {
+    final status = _service.reservationStatus(
+      memberId: _memberId,
+      bookId: book.id,
+    );
+    return ListTile(
+      key: Key('book-${book.id}'),
+      title: Text(book.title),
+      subtitle: Text(
+        [
+          '${book.author} · ${_service.availableCopies(book.id)} of '
+              '${book.totalCopies} available',
+          ?_reservationText(status),
+        ].join(' · '),
+      ),
+      trailing: _actionFor(book, borrowedIds, status),
+    );
+  }
+
+  static String? _reservationText(ReservationStatus? status) =>
+      switch (status) {
+        Waiting(:final position) => 'Reserved · #$position in queue',
+        null => null,
+      };
+
+  /// The one action the selected member can take on [book], if any.
+  Widget? _actionFor(
+    Book book,
+    Set<String> borrowedIds,
+    ReservationStatus? status,
+  ) {
     if (borrowedIds.contains(book.id)) {
       return OutlinedButton(
         onPressed: () => _run(
@@ -109,6 +130,16 @@ class _BooksScreenState extends State<BooksScreen> {
           'Returned "${book.title}"',
         ),
         child: const Text('Return'),
+      );
+    }
+    if (status is Waiting) return null;
+    if (_service.availableCopies(book.id) == 0) {
+      return FilledButton.tonal(
+        onPressed: () => _run(
+          () => _service.reserve(memberId: _memberId, bookId: book.id),
+          'Reserved "${book.title}"',
+        ),
+        child: const Text('Reserve'),
       );
     }
     return FilledButton(

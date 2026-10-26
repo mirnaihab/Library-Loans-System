@@ -4,6 +4,7 @@ import '../models/book.dart';
 import '../models/fee.dart';
 import '../models/loan.dart';
 import '../models/member.dart';
+import '../models/reservation.dart';
 
 /// Thrown when a borrow or return is not allowed. [message] is shown to the user.
 class LoanException implements Exception {
@@ -38,6 +39,7 @@ class LibraryService {
   final DateTime Function() _clock;
   final List<Loan> _loans = [];
   final List<Fee> _fees = [];
+  final List<Reservation> _reservations = [];
 
   List<Book> get books => List.unmodifiable(_books.values);
   List<Member> get members => List.unmodifiable(_members.values);
@@ -72,6 +74,38 @@ class LibraryService {
 
   Iterable<Fee> _unpaidFeesFor(String memberId) =>
       _fees.where((f) => !f.isPaid && f.memberId == memberId);
+
+  /// Adds the member to the back of the book's reservation queue.
+  Reservation reserve({required String memberId, required String bookId}) {
+    _requireMember(memberId);
+    _requireBook(bookId);
+    if (_findActiveLoan(memberId, bookId) != null) {
+      throw const LoanException('Member already has this book');
+    }
+    if (reservationStatus(memberId: memberId, bookId: bookId) != null) {
+      throw const LoanException('Already reserved');
+    }
+    if (availableCopies(bookId) > 0) {
+      throw const LoanException('Copies are available, borrow instead');
+    }
+    final reservation = Reservation(
+      memberId: memberId,
+      bookId: bookId,
+      reservedOn: _clock(),
+    );
+    _reservations.add(reservation);
+    return reservation;
+  }
+
+  /// Where the member's reservation for the book stands, or null if none.
+  ReservationStatus? reservationStatus({
+    required String memberId,
+    required String bookId,
+  }) {
+    final queue = _reservations.where((r) => r.bookId == bookId).toList();
+    final index = queue.indexWhere((r) => r.memberId == memberId);
+    return index == -1 ? null : Waiting(index + 1);
+  }
 
   Loan borrow({required String memberId, required String bookId}) {
     _requireMember(memberId);

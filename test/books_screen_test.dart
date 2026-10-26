@@ -119,16 +119,17 @@ void main() {
     },
   );
 
-  testWidgets('another member cannot borrow the last copy', (tester) async {
+  testWidgets('a book with no copies shows Reserve instead of Borrow', (
+    tester,
+  ) async {
     await pumpApp(tester);
     await tester.tap(buttonIn('b2', 'Borrow'));
     await tester.pump();
 
     await selectMember(tester, 'Omar');
-    await tester.tap(buttonIn('b2', 'Borrow'));
-    await tester.pumpAndSettle(); // let the previous snackbar animate out
 
-    expect(find.text('No copies available'), findsOneWidget);
+    expect(buttonIn('b2', 'Reserve'), findsOneWidget);
+    expect(buttonIn('b2', 'Borrow'), findsNothing);
   });
 
   group('outstanding fees', () {
@@ -204,6 +205,33 @@ void main() {
       expect(
         find.byKey(const Key('outstandingFees')).hitTestable(),
         findsOneWidget,
+      );
+    });
+  });
+
+  group('reservations', () {
+    Finder subtitleOf(String bookId, String text) => find.descendant(
+      of: find.byKey(Key('book-$bookId')),
+      matching: find.textContaining(text),
+    );
+
+    testWidgets('Reserve puts the member in the queue', (tester) async {
+      await pumpApp(tester);
+      await tester.tap(buttonIn('b2', 'Borrow'));
+      await tester.pump();
+      await selectMember(tester, 'Omar');
+
+      await tester.tap(buttonIn('b2', 'Reserve'));
+      await tester.pumpAndSettle(); // let the previous snackbar animate out
+
+      expect(find.text('Reserved "The Pragmatic Programmer"'), findsOneWidget);
+      expect(subtitleOf('b2', 'Reserved · #1 in queue'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('book-b2')),
+          matching: find.byType(ButtonStyleButton),
+        ),
+        findsNothing,
       );
     });
   });
